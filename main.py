@@ -110,7 +110,7 @@ async def add_apikey(req: APIKeyRequest):
     save_apikeys(keys)
     return {"status": "success", "message": f"API key {req.apikey} added"}
 
-@app.post("/apikey/delete")
+@app.post("/apikey/del")
 async def delete_apikey(req: APIKeyRequest):
     keys = load_apikeys()
     if req.apikey not in keys:
@@ -119,7 +119,7 @@ async def delete_apikey(req: APIKeyRequest):
     save_apikeys(keys)
     return {"status": "success", "message": f"API key {req.apikey} deleted"}
 
-@app.get("/apikey/list")
+@app.get("/apikey/l")
 async def list_apikeys():
     keys = load_apikeys()
     return {"status": "success", "apikeys": keys}
