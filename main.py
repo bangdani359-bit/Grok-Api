@@ -9,7 +9,7 @@ from typing import List
 
 app = FastAPI()
 
-# FILE SYSTEM PROMPT
+# FILE SYSTEM PROMPT & APIKEYS
 SYSTEM_PROMPT_FILE = "system-prompt.txt"
 APIKEY_FILE = "apikeys.json"
 
@@ -64,7 +64,7 @@ def format_proxy(proxy: str) -> str:
     else:
         return f"http://{parsed.hostname}:{parsed.port}"
 
-# ENDPOINT ASK (API key required)
+# ENDPOINT ASK (API key required & system prompt fixed)
 @app.post("/ask")
 async def create_conversation(request: ConversationRequest, x_api_key: str = Header(...)):
     validate_apikey(x_api_key)
@@ -82,13 +82,13 @@ async def create_conversation(request: ConversationRequest, x_api_key: str = Hea
     try:
         bot = Grok(request.model, proxy)
 
+        # FIX SYSTEM PROMPT
         system_prompt = load_system_prompt()
+        extra_data = request.extra_data or {}
         if system_prompt:
-            final_message = f"{system_prompt}\n\nUser: {request.message}"
-        else:
-            final_message = request.message
+            extra_data["system_prompt"] = system_prompt
 
-        answer = bot.start_convo(final_message, request.extra_data)
+        answer = bot.start_convo(request.message, extra_data)
 
         return {"status": "success", **answer}
 
