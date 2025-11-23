@@ -1,9 +1,8 @@
-from fastapi      import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from urllib.parse import urlparse, ParseResult
-from pydantic     import BaseModel
-from core         import Grok
-from uvicorn      import run
-
+from pydantic import BaseModel
+from core import Grok
+import uvicorn
 
 app = FastAPI()
 
@@ -14,9 +13,8 @@ class ConversationRequest(BaseModel):
     extra_data: dict = None
 
 def format_proxy(proxy: str) -> str:
-    
     if not proxy.startswith(("http://", "https://")):
-        proxy: str = "http://" + proxy
+        proxy = "http://" + proxy
     
     try:
         parsed: ParseResult = urlparse(proxy)
@@ -29,7 +27,6 @@ def format_proxy(proxy: str) -> str:
 
         if parsed.username and parsed.password:
             return f"http://{parsed.username}:{parsed.password}@{parsed.hostname}:{parsed.port}"
-        
         else:
             return f"http://{parsed.hostname}:{parsed.port}"
     
@@ -44,14 +41,10 @@ async def create_conversation(request: ConversationRequest):
     proxy = format_proxy(request.proxy)
     
     try:
-        answer: dict = Grok(request.model, proxy).start_convo(request.message, request.extra_data)
-
-        return {
-            "status": "success",
-            **answer
-        }
+        answer = Grok(request.model, proxy).start_convo(request.message, request.extra_data)
+        return {"status": "success", **answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 if __name__ == "__main__":
-    run("api_server:app", host="0.0.0.0", port=6969, workers=50)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
