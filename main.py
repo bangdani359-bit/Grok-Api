@@ -3,8 +3,14 @@ from urllib.parse import urlparse, ParseResult
 from pydantic import BaseModel
 from core import Grok
 import uvicorn
+import os
 
 app = FastAPI()
+
+# HEALTH CHECK WAJIB ADA!!!
+@app.get("/")
+async def health():
+    return {"status": "ok"}
 
 class ConversationRequest(BaseModel):
     proxy: str
@@ -47,4 +53,5 @@ async def create_conversation(request: ConversationRequest):
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 3000))  # Deployra kasih port otomatis
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
