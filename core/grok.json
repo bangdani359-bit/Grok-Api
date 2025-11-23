@@ -1,0 +1,47 @@
+[
+  {
+    "xsid_script": "static/chunks/444a4d2e0656ce52.js",
+    "action_script": "/_next/static/chunks/07efa55314110fbd.js",
+    "actions": [
+      "7f7a9e476198643fb30f17ab0e0c41f8f2edc18ae7",
+      "7f0a06a29ceb599ed2d3901e16b2a1e088d2372deb",
+      "7f38fb97af610ff9d28ae27294dc41bd9eca880852"
+    ]
+  },
+  {
+    "xsid_script": "static/chunks/9e496d2be7115b4d.js",
+    "action_script": "/_next/static/chunks/fcbe5d6b4ae286fe.js",
+    "actions": [
+      "7fd00a18c007ec926f1136cb558f9ef9f903dcc1f4",
+      "7f795a3c3829bb45c6e2d2ad0587c7e039f513a509",
+      "7fa94a2c9b7ebcf8874e824d3365d9b9735a7afe34"
+    ]
+  },
+  {
+    "xsid_script": "static/chunks/0d10794d148c0625.js",
+    "action_script": "/_next/static/chunks/4e17d7282d88784a.js",
+    "actions": [
+      "7f0ec78d0b2f079a79c35b44f4e9af8a794699655a",
+      "7f1f8c3d0fd70a186013fff5e96f5569047b4076c6",
+      "7f37925004b97407db977e9db172220f304ac00b50"
+    ]
+  },
+  {
+    "xsid_script": "static/chunks/9031fc1e820c91fa.js",
+    "action_script": "/_next/static/chunks/8769470d35979433.js",
+    "actions": [
+      "7ffc3b9c677cf80a05492600b4c954dc2d7a74a2b9",
+      "7f0fd3040f586c0016082fdf6d15a7effc09d1f9ea",
+      "7f888b835ea7868acd8a14fb355d15d14c56785674"
+    ]
+  },
+  {
+    "xsid_script": "static/chunks/b555cb53ad97e8eb.js",
+    "action_script": "/_next/static/chunks/7bd1a2cf13436090.js",
+    "actions": [
+      "7ffe4b12672b8672abac07862a8c28e417bed1f3bd",
+      "7fb7378a14e60d5619eed301a3177028775e4ef158",
+      "7f436b40f58a8f2f3a47b1fc7e9e85adfd678fe935"
+    ]
+  }
+]
