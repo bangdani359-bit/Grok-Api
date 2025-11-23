@@ -1,23 +1,40 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from urllib.parse import urlparse, ParseResult
 from pydantic import BaseModel
 from core.grok import Grok
 import uvicorn
 import os
+import json
+from typing import List
 
 app = FastAPI()
 
 # FILE SYSTEM PROMPT
 SYSTEM_PROMPT_FILE = "system-prompt.txt"
+APIKEY_FILE = "apikeys.json"
 
 def load_system_prompt() -> str | None:
-    """Baca system prompt dari file jika ada"""
     if os.path.exists(SYSTEM_PROMPT_FILE):
         with open(SYSTEM_PROMPT_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
     return None
 
-# HEALTH CHECK → wajib buat Deployra
+def load_apikeys() -> List[str]:
+    if os.path.exists(APIKEY_FILE):
+        with open(APIKEY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_apikeys(keys: List[str]):
+    with open(APIKEY_FILE, "w", encoding="utf-8") as f:
+        json.dump(keys, f, indent=2)
+
+def validate_apikey(apikey: str):
+    keys = load_apikeys()
+    if apikey not in keys:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+# HEALTH CHECK
 @app.get("/")
 async def health():
     return {"status": "ok"}
@@ -47,13 +64,14 @@ def format_proxy(proxy: str) -> str:
     else:
         return f"http://{parsed.hostname}:{parsed.port}"
 
-# ENDPOINT ASK
+# ENDPOINT ASK (API key required)
 @app.post("/ask")
-async def create_conversation(request: ConversationRequest):
+async def create_conversation(request: ConversationRequest, x_api_key: str = Header(...)):
+    validate_apikey(x_api_key)
+
     if not request.message:
         raise HTTPException(status_code=400, detail="Message is required")
 
-    # Handle proxy opsional
     proxy = None
     if request.proxy:
         try:
@@ -64,9 +82,6 @@ async def create_conversation(request: ConversationRequest):
     try:
         bot = Grok(request.model, proxy)
 
-        # ===========================
-        # 🔥 SYSTEM PROMPT HANDLING DARI FILE
-        # ===========================
         system_prompt = load_system_prompt()
         if system_prompt:
             final_message = f"{system_prompt}\n\nUser: {request.message}"
@@ -79,6 +94,35 @@ async def create_conversation(request: ConversationRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+# -------------------------------
+# API KEY MANAGEMENT
+# -------------------------------
+class APIKeyRequest(BaseModel):
+    apikey: str
+
+@app.post("/apikey/add")
+async def add_apikey(req: APIKeyRequest):
+    keys = load_apikeys()
+    if req.apikey in keys:
+        raise HTTPException(status_code=400, detail="API key already exists")
+    keys.append(req.apikey)
+    save_apikeys(keys)
+    return {"status": "success", "message": f"API key {req.apikey} added"}
+
+@app.post("/apikey/delete")
+async def delete_apikey(req: APIKeyRequest):
+    keys = load_apikeys()
+    if req.apikey not in keys:
+        raise HTTPException(status_code=404, detail="API key not found")
+    keys.remove(req.apikey)
+    save_apikeys(keys)
+    return {"status": "success", "message": f"API key {req.apikey} deleted"}
+
+@app.get("/apikey/list")
+async def list_apikeys():
+    keys = load_apikeys()
+    return {"status": "success", "apikeys": keys}
 
 # RUN UVICORN
 if __name__ == "__main__":
