@@ -6,10 +6,10 @@ import uvicorn
 import os
 import json
 from typing import List
+from fastapi.concurrency import run_in_threadpool
 
 app = FastAPI()
 
-# FILE SYSTEM PROMPT & APIKEYS
 SYSTEM_PROMPT_FILE = "system-prompt.txt"
 APIKEY_FILE = "apikeys.json"
 
@@ -34,19 +34,16 @@ def validate_apikey(apikey: str):
     if apikey not in keys:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-# HEALTH CHECK
 @app.get("/")
 async def health():
     return {"status": "ok"}
 
-# REQUEST BODY
 class ConversationRequest(BaseModel):
     proxy: str | None = None
     message: str
     model: str = "grok-3-auto"
     extra_data: dict | None = None
 
-# FORMAT PROXY
 def format_proxy(proxy: str) -> str:
     if not proxy.startswith(("http://", "https://")):
         proxy = "http://" + proxy
@@ -64,7 +61,6 @@ def format_proxy(proxy: str) -> str:
     else:
         return f"http://{parsed.hostname}:{parsed.port}"
 
-# ENDPOINT ASK (API key required & system prompt fixed)
 @app.post("/ask")
 async def create_conversation(request: ConversationRequest, x_api_key: str = Header(...)):
     validate_apikey(x_api_key)
@@ -82,22 +78,20 @@ async def create_conversation(request: ConversationRequest, x_api_key: str = Hea
     try:
         bot = Grok(request.model, proxy)
 
-        # FIX SYSTEM PROMPT
+        # LOAD SYSTEM PROMPT
         system_prompt = load_system_prompt()
         extra_data = request.extra_data or {}
         if system_prompt:
             extra_data["system_prompt"] = system_prompt
 
-        answer = bot.start_convo(request.message, extra_data)
+        # NON-BLOCKING
+        answer = await run_in_threadpool(bot.start_convo, request.message, extra_data)
 
         return {"status": "success", **answer}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
-# -------------------------------
-# API KEY MANAGEMENT
-# -------------------------------
 class APIKeyRequest(BaseModel):
     apikey: str
 
@@ -124,7 +118,6 @@ async def list_apikeys():
     keys = load_apikeys()
     return {"status": "success", "apikeys": keys}
 
-# RUN UVICORN
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 3000))
     uvicorn.run("main:app", host="0.0.0.0", port=port)
