@@ -227,26 +227,242 @@ class Grok:
         # a fresh conversation. Preserve any provided system_prompt when starting fresh.
         has_followup_ids = isinstance(extra_data, dict) and extra_data.get("conversationId") and extra_data.get("parentResponseId")
 
-        if not extra_data or is_system_only or not has_followup_ids:
-            self._load()
-            # if caller provided a system prompt, persist it for this conversation
-            if isinstance(extra_data, dict) and extra_data.get("system_prompt"):
-                self.system_prompt = extra_data.get("system_prompt")
-            self.c_request(self.actions[0])
-            self.c_request(self.actions[1])
-            self.c_request(self.actions[2])
-            xsid: str = Signature.generate_sign('/rest/app-chat/conversations/new', 'POST', self.verification_token, self.svg_data, self.numbers)
-        else:
-            # safe follow-up path: extra_data contains conversationId and parentResponseId
-            self._load(extra_data)
-            self.c_run: int = 1
-            self.anon_user: str = extra_data.get("anon_user")
-            # privateKey should exist; if not, keep existing keys
-            if extra_data.get("privateKey"):
-                self.keys["privateKey"] = extra_data.get("privateKey")
-            self.c_request(self.actions[1])
-            self.c_request(self.actions[2])
-            xsid: str = Signature.generate_sign(f'/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', 'POST', self.verification_token, self.svg_data, self.numbers)
+        # Retry logic for challenge failures
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                if not extra_data or is_system_only or not has_followup_ids:
+                    self._load()
+                    # if caller provided a system prompt, persist it for this conversation
+                    if isinstance(extra_data, dict) and extra_data.get("system_prompt"):
+                        self.system_prompt = extra_data.get("system_prompt")
+                    self.c_request(self.actions[0])
+                    self.c_request(self.actions[1])
+                    self.c_request(self.actions[2])
+                    xsid: str = Signature.generate_sign('/rest/app-chat/conversations/new', 'POST', self.verification_token, self.svg_data, self.numbers)
+                else:
+                    # safe follow-up path: extra_data contains conversationId and parentResponseId
+                    self._load(extra_data)
+                    self.c_run: int = 1
+                    self.anon_user: str = extra_data.get("anon_user")
+                    # privateKey should exist; if not, keep existing keys
+                    if extra_data.get("privateKey"):
+                        self.keys["privateKey"] = extra_data.get("privateKey")
+                    self.c_request(self.actions[1])
+                    self.c_request(self.actions[2])
+                    xsid: str = Signature.generate_sign(f'/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', 'POST', self.verification_token, self.svg_data, self.numbers)
+
+                self.session.headers = {
+                    'accept': '*/*',
+                    'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'baggage': self.baggage,
+                    'cache-control': 'no-cache',
+                    'content-type': 'application/json',
+                    'origin': 'https://grok.com',
+                    'pragma': 'no-cache',
+                    'priority': 'u=1, i',
+                    'referer': 'https://grok.com/c',
+                    'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+                    'x-statsig-id': xsid,
+                    'x-xai-request-id': str(uuid4()),
+                }
+                
+                if not has_followup_ids:
+                    conversation_data: dict = {
+                        'temporary': False,
+                        'modelName': self.model,
+                        'message': message,
+                        # include customPersonality when provided via system_prompt so Grok uses it
+                        'customPersonality': getattr(self, 'system_prompt', '') or '',
+                        'fileAttachments': [],
+                        'imageAttachments': [],
+                        'disableSearch': False,
+                        'enableImageGeneration': True,
+                        'returnImageBytes': False,
+                        'returnRawGrokInXaiRequest': False,
+                        'enableImageStreaming': True,
+                        'imageGenerationCount': 2,
+                        'forceConcise': False,
+                        'toolOverrides': {},
+                        'enableSideBySide': True,
+                        'sendFinalMetadata': True,
+                        'isReasoning': False,
+                        'webpageUrls': [],
+                        'disableTextFollowUps': False,
+                        'responseMetadata': {
+                            'requestModelDetails': {
+                                'modelId': self.model,
+                            },
+                        },
+                        'disableMemory': False,
+                        'forceSideBySide': False,
+                        'modelMode': self.model_mode,
+                        'isAsyncChat': False,
+                    }
+                    
+                    convo_request: requests.models.Response = self.session.post('https://grok.com/rest/app-chat/conversations/new', json=conversation_data, timeout=9999)
+                    
+                    if "modelResponse" in convo_request.text:
+                        response = conversation_id = parent_response = image_urls = None
+                        stream_response: list = []
+                        
+                        for response_dict in convo_request.text.strip().split('\n'):  
+                            data: dict = loads(response_dict)
+
+                            token: str = data.get('result', {}).get('response', {}).get('token')
+                            if token:
+                                stream_response.append(token)
+                                
+                            if not response and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('message'):
+                                response: str = data['result']['response']['modelResponse']['message']
+
+                            if not conversation_id and data.get('result', {}).get('conversation', {}).get('conversationId'):
+                                conversation_id: str = data['result']['conversation']['conversationId']
+
+                            if not parent_response and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('responseId'):
+                                parent_response: str = data['result']['response']['modelResponse']['responseId']
+                            
+                            if not image_urls and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('generatedImageUrls', {}):
+                                image_urls: str = data['result']['response']['modelResponse']['generatedImageUrls']
+                            
+                        
+                        return {
+                            "response": response,
+                            "stream_response": stream_response,
+                            "images": image_urls,
+                            "extra_data": {
+                                "anon_user": self.anon_user,
+                                "cookies": self.session.cookies.get_dict(),
+                                "actions": self.actions,
+                                "xsid_script": self.xsid_script,
+                                "baggage": self.baggage,
+                                "sentry_trace": self.sentry_trace,
+                                "conversationId": conversation_id,
+                                "parentResponseId": parent_response,
+                                "privateKey": self.keys["privateKey"],
+                                "system_prompt": getattr(self, 'system_prompt', None)
+                            }
+                        }
+                    else:
+                        if 'rejected by anti-bot rules' in convo_request.text:
+                            return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
+                        
+                        # Check for invalid challenge error and retry
+                        if 'Invalid encrypted challenge' in convo_request.text and retry_count < max_retries - 1:
+                            retry_count += 1
+                            Log.Success(f"Retrying due to challenge error... (Attempt {retry_count}/{max_retries})")
+                            time.sleep(1)  # Wait before retry
+                            continue
+                        
+                        Log.Error("Something went wrong")
+                        Log.Error(convo_request.text)
+                        return {"error": convo_request.text}
+                else:
+                    conversation_data: dict = {
+                        'message': message,
+                        'modelName': self.model,
+                        'parentResponseId': extra_data["parentResponseId"],
+                        'disableSearch': False,
+                        'enableImageGeneration': True,
+                        'imageAttachments': [],
+                        'returnImageBytes': False,
+                        'returnRawGrokInXaiRequest': False,
+                        'fileAttachments': [],
+                        'enableImageStreaming': True,
+                        'imageGenerationCount': 2,
+                        'forceConcise': False,
+                        'toolOverrides': {},
+                        'enableSideBySide': True,
+                        'sendFinalMetadata': True,
+                        # follow-ups should also carry the custom personality (system prompt) if present
+                        'customPersonality': getattr(self, 'system_prompt', '') or '',
+                        'isReasoning': False,
+                        'webpageUrls': [],
+                        'metadata': {
+                            'requestModelDetails': {
+                                'modelId': self.model,
+                            },
+                            'request_metadata': {
+                                'model': self.model,
+                                'mode': self.mode,
+                            },
+                        },
+                        'disableTextFollowUps': False,
+                        'disableArtifact': False,
+                        'isFromGrokFiles': False,
+                        'disableMemory': False,
+                        'forceSideBySide': False,
+                        'modelMode': self.model_mode,
+                        'isAsyncChat': False,
+                        'skipCancelCurrentInflightRequests': False,
+                        'isRegenRequest': False,
+                    }
+
+                    convo_request: requests.models.Response = self.session.post(f'https://grok.com/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', json=conversation_data, timeout=9999)
+
+                    if "modelResponse" in convo_request.text:
+                        response = conversation_id = parent_response = image_urls = None
+                        stream_response: list = []
+                        
+                        for response_dict in convo_request.text.strip().split('\n'):
+                            data: dict = loads(response_dict)
+
+                            token: str = data.get('result', {}).get('token')
+                            if token:
+                                stream_response.append(token)
+                                
+                            if not response and data.get('result', {}).get('modelResponse', {}).get('message'):
+                                response: str = data['result']['modelResponse']['message']
+
+                            if not parent_response and data.get('result', {}).get('modelResponse', {}).get('responseId'):
+                                parent_response: str = data['result']['modelResponse']['responseId']
+                                
+                            if not image_urls and data.get('result', {}).get('modelResponse', {}).get('generatedImageUrls', {}):
+                                image_urls: str = data['result']['modelResponse']['generatedImageUrls']
+                        
+                        return {
+                            "response": response,
+                            "stream_response": stream_response,
+                            "images": image_urls,
+                            "extra_data": {
+                                "anon_user": self.anon_user,
+                                "cookies": self.session.cookies.get_dict(),
+                                "actions": self.actions,
+                                "xsid_script": self.xsid_script,
+                                "baggage": self.baggage,
+                                "sentry_trace": self.sentry_trace,
+                                "conversationId": extra_data["conversationId"],
+                                "parentResponseId": parent_response,
+                                "privateKey": self.keys["privateKey"],
+                                "system_prompt": getattr(self, 'system_prompt', None)
+                            }
+                        }
+                    else:
+                        if 'rejected by anti-bot rules' in convo_request.text:
+                            return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
+                        Log.Error("Something went wrong")
+                        Log.Error(convo_request.text)
+                        return {"error": convo_request.text}
+                
+                # If we reach here, break the loop (success)
+                break
+                
+            except Exception as e:
+                if retry_count < max_retries - 1:
+                    retry_count += 1
+                    Log.Success(f"Retrying after exception... (Attempt {retry_count}/{max_retries})")
+                    time.sleep(1)
+                else:
+                    raise
 
         self.session.headers = {
             'accept': '*/*',
