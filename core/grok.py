@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from bs4         import BeautifulSoup
 from json        import dumps, loads
 import sys
+import time
 from uuid        import uuid4
 
 
@@ -150,6 +151,7 @@ class Grok:
         }
         
         if self.c_run == 0:
+            Log.Success(f"Challenge Request [Step 1/3]: Initiating key exchange")
             mime = CurlMime()
             mime.addpart(name="1", data=bytes(self.keys["userPublicKey"]), filename="blob", content_type="application/octet-stream")
             mime.addpart(name="0", filename=None, data='[{"userPublicKey":"$o1"}]')
@@ -158,7 +160,9 @@ class Grok:
             self.session.cookies.update(c_request.cookies)
             
             self.anon_user: str = Utils.between(c_request.text, '{"anonUserId":"', '"')
+            Log.Success(f"Anonymous User Created: {self.anon_user[:20] if self.anon_user else 'ERROR'}...")
             self.c_run += 1
+            time.sleep(0.5)  # Small delay between requests
             
         else:
             self.session.headers.update({
@@ -167,8 +171,10 @@ class Grok:
             
             match self.c_run:
                 case 1:
+                    Log.Success(f"Challenge Request [Step 2/3]: Requesting challenge")
                     data: str = dumps([{"anonUserId":self.anon_user}])
                 case 2:
+                    Log.Success(f"Challenge Request [Step 3/3]: Sending signed challenge")
                     data: str = dumps([{"anonUserId":self.anon_user,**self.challenge_dict}])
             
             c_request: requests.models.Response = self.session.post('https://grok.com/c', data=data)
@@ -182,15 +188,32 @@ class Grok:
                         end_idx = c_request.content.hex().find("313a", start_idx)
                         if end_idx != -1:
                             challenge_hex = c_request.content.hex()[start_idx:end_idx]
-                            challenge_bytes = bytes.fromhex(challenge_hex)
-
-                    self.challenge_dict: dict = Anon.sign_challenge(challenge_bytes, self.keys["privateKey"])
-                    Log.Success(f"Solving Challenge . . . . . . .")
-                    Log.Success(f"t.me/xsocietyforums")
+                            # Ensure even length for hex conversion
+                            if len(challenge_hex) % 2 == 1:
+                                challenge_hex = challenge_hex[:-1]
+                            try:
+                                challenge_bytes = bytes.fromhex(challenge_hex)
+                                Log.Success(f"Challenge extracted: {len(challenge_bytes)} bytes")
+                                self.challenge_dict: dict = Anon.sign_challenge(challenge_bytes, self.keys["privateKey"])
+                                Log.Success(f"Challenge signed successfully")
+                            except Exception as e:
+                                Log.Error(f"Failed to sign challenge: {e}")
+                                Log.Error(f"Challenge hex length: {len(challenge_hex)}, preview: {challenge_hex[:100]}")
+                                raise
+                        else:
+                            Log.Error("Could not find challenge end marker (313a) in response")
+                            Log.Error(f"Response hex preview: {c_request.content.hex()[:500]}")
+                            raise RuntimeError("Invalid challenge response format")
+                    else:
+                        Log.Error("Could not find challenge start marker (3a6f38362c) in response")
+                        Log.Error(f"Response text preview: {c_request.text[:500]}")
+                        raise RuntimeError("Invalid challenge response format")
                 case 2:
                     self.verification_token, self.anim = Parser.get_anim(c_request.text, "grok-site-verification")
                     self.svg_data, self.numbers = Parser.parse_values(c_request.text, self.anim, self.xsid_script)
-                    
+                    Log.Success(f"Verification data extracted successfully")
+            
+            time.sleep(0.5)  # Small delay between requests
             self.c_run += 1
         
     
