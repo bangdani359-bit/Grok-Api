@@ -13,7 +13,8 @@ class Models:
         "grok-3-auto": ["MODEL_MODE_AUTO", "auto"],
         "grok-3-fast": ["MODEL_MODE_FAST", "fast"],
         "grok-4": ["MODEL_MODE_EXPERT", "expert"],
-        "grok-4-mini-thinking-tahoe": ["MODEL_MODE_GROK_4_MINI_THINKING", "grok-4-mini-thinking"]
+        "grok-4-mini-thinking-tahoe": ["MODEL_MODE_GROK_4_MINI_THINKING", "grok-4-mini-thinking"],
+        "grok-4.1": ["MODEL_MODE_GROK_4_1", "grok-4.1"]
     })
 
     def get_model_mode(self, model: str, index: int) -> str:
@@ -415,4 +416,3 @@ class Grok:
                 Log.Error(convo_request.text)
                 return {"error": convo_request.text}
             
-
