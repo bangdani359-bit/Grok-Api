@@ -120,4 +120,10 @@ async def list_apikeys():
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 3000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        timeout_keep_alive=300,  # 5 minutes keep-alive for long requests
+        timeout_notify=60,
+    )
