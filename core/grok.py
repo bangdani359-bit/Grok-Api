@@ -336,7 +336,7 @@ class Grok:
                             
                         
                         return {
-                            "response": response,
+                            "response": response if response else "(Grok processed the request but did not return a message response)",
                             "stream_response": stream_response,
                             "images": image_urls,
                             "extra_data": {
@@ -430,7 +430,7 @@ class Grok:
                                 image_urls: str = data['result']['modelResponse']['generatedImageUrls']
                         
                         return {
-                            "response": response,
+                            "response": response if response else "(Grok processed the request but did not return a message response)",
                             "stream_response": stream_response,
                             "images": image_urls,
                             "extra_data": {
@@ -546,7 +546,7 @@ class Grok:
                     
                 
                 return {
-                    "response": response,
+                    "response": response if response else "(Grok processed the request but did not return a message response)",
                     "stream_response": stream_response,
                     "images": image_urls,
                     "extra_data": {
@@ -632,7 +632,7 @@ class Grok:
                         image_urls: str = data['result']['modelResponse']['generatedImageUrls']
                 
                 return {
-                    "response": response,
+                    "response": response if response else "(Grok processed the request but did not return a message response)",
                     "stream_response": stream_response,
                     "images": image_urls,
                     "extra_data": {
