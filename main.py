@@ -87,7 +87,17 @@ async def create_conversation(request: ConversationRequest, x_api_key: str = Hea
         # NON-BLOCKING
         answer = await run_in_threadpool(bot.start_convo, request.message, extra_data)
 
-        return {"status": "success", **answer}
+        # Extract just the response message for the API response
+        if answer.get("error"):
+            return {"status": "error", "response": answer.get("error")}
+        
+        # Return simplified response for client
+        return {
+            "status": "success",
+            "response": answer.get("response", ""),
+            "images": answer.get("images", []),
+            "extra_data": answer.get("extra_data", {})
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
